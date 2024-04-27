@@ -16,6 +16,7 @@ const MathUtil = require('./util/math-util');
 const Runtime = require('./engine/runtime');
 const StringUtil = require('./util/string-util');
 const RenderedTarget = require('./sprites/rendered-target');
+const StageLayering = require('./engine/stage-layering');
 const Sprite = require('./sprites/sprite');
 const Blocks = require('./engine/blocks');
 const formatMessage = require('format-message');
@@ -247,7 +248,8 @@ class VirtualMachine extends EventEmitter {
             jsexecute,
             loadCostume,
             loadSound,
-            Blocks
+            Blocks,
+            StageLayering
         };
     }
 

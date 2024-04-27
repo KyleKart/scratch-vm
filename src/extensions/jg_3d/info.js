@@ -1,416 +1,935 @@
-const BlockType = require('../../extension-support/block-type');
-const ArgumentType = require('../../extension-support/argument-type');
+const Cast = require('../../util/cast');
+const Clone = require('../../util/clone');
+const ExtensionInfo = require("./info");
+const Three = require("three");
+const BufferGeometryUtils = require('three/examples/jsm/utils/BufferGeometryUtils');
+const { ConvexGeometry } = require('three/examples/jsm/geometries/ConvexGeometry');
+const { OBJLoader } = require('three/examples/jsm/loaders/OBJLoader.js');
+const { GLTFLoader } = require('three/examples/jsm/loaders/GLTFLoader.js');
+const { FBXLoader } = require('three/examples/jsm/loaders/FBXLoader.js');
+const Color = require('../../util/color');
 
-const Icons = {
-    Cube: require('./cube.png'),
-    Sphere: require('./sphere.png'),
-    Plane: require('./plane.png'),
-    Light: require('./light.png'),
-    OBJ: require('./obj.png'),
-    Camera: require('./camera.png'),
-    Touching: require('./touching.png'),
-    Wireframe: require('./wireframe.png'),
-    Raycast: require('./raycast.png'),
+const MeshLoaders = {
+    OBJ: new OBJLoader(),
+    GLTF: new GLTFLoader(),
+    FBX: new FBXLoader(),
+}
+function toRad(deg) {
+    return deg * (Math.PI / 180);
+}
+function toDeg(rad) {
+    return rad * (180 / Math.PI);
+}
+function toDegRounding(rad) {
+    const result = toDeg(rad);
+    if (!String(result).includes('.')) return result;
+    const split = String(result).split('.');
+    const endingDecimals = split[1].substring(0, 3);
+    if ((endingDecimals === '999') && (split[1].charAt(3) === '9')) return Number(split[0]) + 1;
+    return Number(split[0] + '.' + endingDecimals);
 }
 
-const blockIconURI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAT6SURBVHhe7ZtdqBVVFMfXnHuvXG9i9/ZhWYGVYWoggqGVFSV9ywUpohch+lARFXwRAu1BEB97kNAKheiphyAKEqKXICIyKuhFS0Qh+yKvZqLXj+sZ//+99syZU/ecMx975pzDzA/WzFpzzszstWatvfeZmSMV3WXArkvHOMSPyFJIKRiChI6PL2kKAsWDFEqRJ6SDhgGcdeoAFG4ZRCNeNpujFNauIk40AblBVZH6fpx0mrPW6wjMOmson0OeUTU/anadB9sgvMbG+fdfhYGrPp3zpIaW8PMDr9kNIk9DuP+LxsqJPDLgRsgpVUXunyfy3ZtQkpwJbt/9hsjx8CiG6yAXVHWH6wCEdT42InJ6D5QsZ8DRZm8SOXfJ2orTNrs62J+QW1QVmXxHZJj9vSPOToqMbraG8gfkNlWzkbUPWA/hVTfO/7gTBurYpfPk+pl63P2v2A0icyE87xPGykDGBFWW3ynyLeu8CHDWFbtEDp2wtpLaj6Q78vsYsJQhTGQvvwvFVSElZAjD5lTYGkPiliTZ4STkdlVxIT7A4orqXQUeeBhiIxyGLFa1M3H6gNUQprtxft9aGJzF9YLzBC1je7Zx1qAsgrC9DxurA+0yYAxyWlWRNfi58jF74i6leyzg9sLtIj//ZW1lFHJW1f/Tyh1uN9U1MkPk/F67pV9AIGZsQJJetXab1rf6gAk+OPUZ5ucc4fuUr4+hDnYb9RBkhdH+Q9s+YGA+FisRUFZUH1FnezFTWLlK7XbEmgh57E4ozUNO70HHMT+sJZgjxp8J8uCPQB4wVu/Bn2B0PGG2Jp8K8y4ey4J9aw9QH8aCE2N01mlIHgCLdx8WCIQ0etpCMf0SHK9xsM5A6gCEPGolYeqlJXDcc/Jb0EUACLMAnaT/kJp54c9x53iAmwBYzO0u9g/skBxSH8SCVz2HpwhOAxDgLcSCgch4dJ+ZxTq/We08yCUAAd6DWLCjTDp/YJ0j1b071MyTXAMQgvmDv8zqHTDlk2I8T0sxAQAex2uWRYtOrM5xnHWecjxPS2EBCPDuwoKBsPMHn+XBOnfcccal8AAEeJw74MeWF95j6g5dC0CvUAXArktLFQC7Li1VAOy6tFQBsOvSUgXArktLFQC7Li3tA8B7cf3MrM5PdFt9YzYkfKTs/4JFHo/F+ODV+YtvYACONd4XIC0j0SoD/oWE92a8BSL3PAmloNtUWVjwenznSbsS4CNy7mxuYh37FcYikYkLndOqG5ycQPueEzn6u92AAoB0bGwSbw5CnlUVycD0/Uf11LgoAVxCr/mN4rchW1TtTJrLeRli3gQcRpFM/kQtJRkDUFuNC9Fclon9STMMsm8wL0BfRCj4EOSlrbQKAg4v3YzzIt0jzs+EpKrNVDtF4NsC36gq8ulekfEYb2WEJM2A4Zp4q5qGo3shHKNSkzUAAXwva46quDK/YXFO9bbEDcAIGvqY1RUG3cmjWFcBCAiT8qYxkb/D3GhBjADMel7k/EVrKE7bnKYPaAcbN4/KqTMw0D+89yGt5GzZh/1R5xHn50JcXzD3B4zwAuQjVTGt/B7TS/7lIco0GfDFDyJP7bCGwkcoX6nqnjwDENA0UPnHsQj+ABENAPpx73GrK8ihxn+N+h2WGgNhZPF8jGBHIF9CDop/62jjMyuuS7NnQH/ecPSTPUNRpyml4S1I1PGNkIqKiqIRuQYHeAEU9sBGCQAAAABJRU5ErkJggg==";
+/**
+ * Class for 3D blocks
+ * @constructor
+ */
+class Jg3DBlocks {
+    constructor(runtime) {
+        /**
+         * The runtime instantiating this block package.
+         * @type {Runtime}
+         */
+        this.runtime = runtime;
 
-const seperator = "---";
+        this.three = Three;
+        // expose addons and that for the funnis
+        this.BufferGeometryUtils = BufferGeometryUtils;
+        this.ConvexGeometry = ConvexGeometry;
+        this.OBJLoader = OBJLoader;
+        this.GLTFLoader = GLTFLoader;
+        this.FBXLoader = FBXLoader;
+        
+        // prism has screenshots, lets tell it to use OUR canvas for them
+        this.runtime.prism_screenshot_checkForExternalCanvas = true;
+        this.runtime.prism_screenshot_externalCanvas = null;
 
-function infoMenu(array) {
-    return {
-        acceptReporters: true,
-        items: array.map(item => ({ text: item, value: item }))
+        // Three.js requirements
+        /**
+         * @type {Three.Scene}
+         */
+        this.scene = null;
+        /**
+         * @type {Three.Camera}
+         */
+        this.camera = null;
+        /**
+         * @type {Three.WebGLRenderer}
+         */
+        this.renderer = null;
+
+        this.existingSceneObjects = [];
+        this.existingSceneLights = [];
+
+        // extras
+        this.lastStageSizeWhenRendering = {
+            width: 0,
+            height: 0
+        }
+
+        this.savedMeshes = {};
+        this.sceneLayer = "front";
+        this.lastStageColor = [255, 255, 255, 0];
+
+        // event recievers
+        // stop button clicked or project restarted, dispose of all objects
+        this.runtime.on('PROJECT_STOP_ALL', () => {
+            this.dispose();
+            this.sceneLayer = "front";
+            this.updateScratchCanvasRelayering();
+        });
     }
-}
-function infoLabel(text) {
-    return {
-        blockType: BlockType.LABEL,
-        text: text
-    }
-}
-function infoArgument(value, extra, extra2) {
-    switch (typeof value) {
-        case "number":
-            return { type: ArgumentType.NUMBER, defaultValue: value };
-        case "boolean":
-            return { type: ArgumentType.BOOLEAN, defaultValue: value };
-        case "string":
-            switch (value) {
-                case "COLOR":
-                    return { type: ArgumentType.COLOR };
-                case "ANGLE":
-                    return { type: ArgumentType.ANGLE };
-                case "MATRIX":
-                    return { type: ArgumentType.MATRIX };
-                case "NOTE":
-                    return { type: ArgumentType.NOTE, defaultValue: 60 };
-                case "POLYGON":
-                    return { type: ArgumentType.POLYGON, nodes: extra };
-                case "IMAGE":
-                    return { type: ArgumentType.IMAGE, dataURI: extra, alt: extra2 };
-                default:
-                    return { type: ArgumentType.STRING, defaultValue: value };
+
+    /**
+     * Dispose of the scene, camera & renderer (and any objects)
+     */
+    dispose() {
+        this.existingSceneObjects = [];
+        this.existingSceneLights = [];
+        if (this.scene) {
+            this.scene.remove();
+            this.scene = null;
+        }
+        if (this.camera) {
+            this.camera.remove();
+            this.camera = null;
+        }
+        if (this.renderer) {
+            if (this.renderer.domElement) {
+                this.renderer.domElement.remove();
             }
+            this.renderer.dispose();
+            this.renderer = null;
+            this.runtime.prism_screenshot_externalCanvas = null;
+        }
+    }
+    /**
+     * Displays a message for stack blocks.
+     * @param {BlockUtility} util 
+     */
+    stackWarning(util, message) {
+        if (!util) return;
+        if (!util.thread) return;
+        if (!util.thread.stackClick) return;
+        const block = util.thread.blockGlowInFrame;
+        this.runtime.visualReport(block, message);
+    }
+
+    /**
+     * @returns {object} metadata for this extension and its blocks.
+     */
+    getInfo() {
+        return ExtensionInfo;
+    }
+
+    // utilities
+    getScratchCanvas() {
+        return this.runtime.renderer.canvas;
+    }
+    restyleExternalCanvas(canvas) {
+        canvas.style.position = "absolute"; // position above canvas without pushing it down
+        canvas.style.width = "100%";
+        canvas.style.height = "100%";
+        // we have no reason to register clicks on the three.js canvas,
+        // so make it click on the scratch canvas instead
+        canvas.style.pointerEvents = "none";
+    }
+    appendElementAboveScratchCanvas(element) {
+        element.style.zIndex = 450;
+        if (this.sceneLayer === 'back') {
+            element.style.zIndex = 0;
+        }
+        this.getScratchCanvas().parentElement.prepend(element);
+    }
+    updateScratchCanvasRelayering() {
+        const canvas = this.getScratchCanvas();
+        canvas.style.backgroundColor = "transparent";
+        canvas.style.position = "relative"; // allows zIndex changes
+        if (Cast.toNumber(canvas.style.zIndex) < 1) {
+            canvas.style.zIndex = 1;
+        }
+
+        // _backgroundColor4f[3] controls opacity
+        let lastOpacity = this.runtime.renderer._backgroundColor4f[3];
+        if (this.sceneLayer === 'front') {
+            this.runtime.renderer._backgroundColor4f[3] = 1;
+            this.runtime.renderer.setBackgroundColor(
+                this.lastStageColor[0],
+                this.lastStageColor[1],
+                this.lastStageColor[2]
+            );
+        }
+        if (this.sceneLayer === 'back') {
+            if (
+                this.runtime.renderer._backgroundColor4f[0] !== this.lastStageColor[0]
+                || this.runtime.renderer._backgroundColor4f[1] !== this.lastStageColor[1]
+                || this.runtime.renderer._backgroundColor4f[2] !== this.lastStageColor[2]
+            ) {
+                // color likely changed to sum else
+                console.log("updated stage color");
+                this.lastStageColor = this.runtime.renderer._backgroundColor4f;
+            }
+            this.runtime.renderer._backgroundColor4f[3] = 0;
+            this.runtime.renderer.setBackgroundColor(0, 0, 0);
+        }
+        // update if changed
+        if (lastOpacity !== this.runtime.renderer._backgroundColor4f[3]) {
+            this.runtime.renderer.dirty = true;
+        }
+    }
+    needsToResizeCanvas() {
+        const stage = {
+            width: this.runtime.stageWidth,
+            height: this.runtime.stageHeight
+        }
+        return stage !== this.lastStageSizeWhenRendering;
+    }
+    mergeVertices(geometry) {
+        const vertices = geometry.attributes.position.array;
+        const vertexMap = {};
+        const mergedVertices = [];
+        const newIndices = [];
+        let newIndex = 0;
+
+        for (let i = 0; i < vertices.length; i += 3) {
+            const x = vertices[i];
+            const y = vertices[i + 1];
+            const z = vertices[i + 2];
+            const key = `${x},${y},${z}`;
+
+            if (vertexMap[key] === undefined) {
+                vertexMap[key] = newIndex;
+                mergedVertices.push(x, y, z);
+                newIndices.push(newIndex);
+                newIndex++;
+            } else {
+                newIndices.push(vertexMap[key]);
+            }
+        }
+
+        geometry.setAttribute('position', new Three.Float32BufferAttribute(mergedVertices, 3));
+        geometry.setIndex(new Three.Uint32BufferAttribute(newIndices, 1));
+
+        return geometry;
+    }
+
+    performRaycast(raycaster, object) {
+        const geometry = object.geometry;
+
+        const mergedGeometry = this.mergeVertices(geometry);
+
+        const boundingGeometry = new Three.BufferGeometry().copy(mergedGeometry);
+        boundingGeometry.computeBoundingBox();
+        boundingGeometry.boundingBox.applyMatrix4(object.matrixWorld);
+
+        const intersection = raycaster.intersectObject(object, true);
+
+        return intersection.length > 0;
+    }
+
+    initialize() {
+        // dispose of the previous scene
+        this.dispose();
+        this.scene = new Three.Scene();
+        this.renderer = new Three.WebGLRenderer({ preserveDrawingBuffer: true, alpha: true });
+        this.renderer.penguinMod = {
+            backgroundColor: 0x000000,
+            backgroundOpacity: 1
+        }
+        this.renderer.setClearColor(0x000000, 1);
+        // add renderer canvas ontop of scratch canvas
+        const canvas = this.renderer.domElement;
+        this.runtime.prism_screenshot_externalCanvas = canvas;
+
+        this.restyleExternalCanvas(canvas);
+        this.appendElementAboveScratchCanvas(canvas);
+        this.updateScratchCanvasRelayering();
+        /* dev: test rendering by drawing a cube and see if it appears
+        // const geometry = new Three.BoxGeometry(1, 1, 1);
+        // const material = new Three.MeshBasicMaterial({ color: 0x00ff00 });
+        // const cube = new Three.Mesh(geometry, material);
+        // this.scene.add(cube)
+        
+        dev update: it worked W
+        */
+    }
+    render() {
+        if (!this.renderer) return;
+        if (!this.scene) return;
+        if (!this.camera) return;
+        if (this.needsToResizeCanvas()) {
+            this.lastStageSizeWhenRendering = {
+                width: this.runtime.stageWidth,
+                height: this.runtime.stageHeight
+            }
+            /*
+                multiply sizes because the stage looks like doo doo xd
+                we dont need to worry about multiplying 1920 * 2 since projects
+                shouldnt be using that large of a stage but instead a smaller size
+                with the same aspect ratio, penguinmod even says that
+            */
+            this.renderer.setSize(this.lastStageSizeWhenRendering.width * 2, this.lastStageSizeWhenRendering.height * 2);
+            this.restyleExternalCanvas(this.renderer.domElement);
+        }
+        // when switching between project page & editor, we need to move the canvas again since it gets lost
+        /* todo: create layers so that iframe appears above 3d every time this is done */
+        this.appendElementAboveScratchCanvas(this.renderer.domElement);
+        this.updateScratchCanvasRelayering();
+        return new Promise((resolve) => {
+            // we do this to avoid HUGE lag when not waiting 1 tick
+            // and because it waits if the tab isnt focused
+            requestAnimationFrame(() => {
+                // renderer might not exist anymore
+                if (!this.renderer) return;
+                resolve(this.renderer.render(this.scene, this.camera));
+            })
+        })
+    }
+
+    setCameraPerspective2(args) {
+        if (this.camera) {
+            // remove existing camera
+            this.camera.remove();
+            this.camera = null;
+        }
+
+        const fov = Cast.toNumber(args.FOV);
+        const aspect = Cast.toNumber(args.AR);
+        const near = Cast.toNumber(args.NEAR);
+        const far = Cast.toNumber(args.FAR);
+
+        this.camera = new Three.PerspectiveCamera(fov, aspect, near, far);
+    }
+    setCameraPerspective1(args) {
+        /* todo: make near and far be the same as the existing camera if there is one */
+        const near = 0.1;
+        const far = 1000;
+        return this.setCameraPerspective2({
+            FOV: args.FOV,
+            AR: args.AR,
+            NEAR: near,
+            FAR: far
+        })
+    }
+    setCameraPerspective0(args) {
+        /* todo: make ar, near and far be the same as the existing camera if there is one */
+        const ar = this.runtime.stageWidth / this.runtime.stageHeight;
+        const near = 0.1;
+        const far = 1000;
+        return this.setCameraPerspective2({
+            FOV: args.FOV,
+            AR: ar,
+            NEAR: near,
+            FAR: far
+        })
+    }
+
+    setCameraPosition(args) {
+        if (!this.camera) return;
+        const position = {
+            x: Cast.toNumber(args.X),
+            y: Cast.toNumber(args.Y),
+            z: Cast.toNumber(args.Z),
+        }
+        this.camera.position.set(position.x, position.y, position.z);
+    }
+    setCameraRotation(args) {
+        if (!this.camera) return;
+        const rotation = {
+            x: Cast.toNumber(args.X),
+            y: Cast.toNumber(args.Y),
+            z: Cast.toNumber(args.Z),
+        }
+        // const euler = new Three.Euler(toRad(rotation.x), toRad(rotation.y), toRad(rotation.z));
+        // this.camera.setRotationFromEuler(euler);
+        const euler = new Three.Euler(0, 0, 0);
+        this.camera.setRotationFromEuler(euler);
+        this.camera.rotateY(toRad(rotation.y));
+        this.camera.rotateX(toRad(rotation.x));
+        this.camera.rotateZ(toRad(rotation.z));
+    }
+    getCameraPosition(args) {
+        if (!this.camera) return "";
+        const v = args.VECTOR3;
+        if (!v) return "";
+        if (!["x", "y", "z"].includes(v)) return "";
+        return Cast.toNumber(this.camera.position[v]);
+    }
+    getCameraRotation(args) {
+        if (!this.camera) return "";
+        const v = args.VECTOR3;
+        if (!v) return "";
+        if (!["x", "y", "z"].includes(v)) return "";
+        const rotation = Cast.toNumber(this.camera.rotation[v]);
+        // rotation is in radians, convert to degrees but round it
+        // a bit so that we get 46 instead of 45.999999999999996
+        return toDegRounding(rotation);
+    }
+
+    setSceneLayer(args) {
+        if (!this.renderer) return;
+        let lastSceneLayer = this.sceneLayer;
+        this.sceneLayer = "front";
+        if (Cast.toString(args.SIDE) === 'back') {
+            this.sceneLayer = "back";
+        }
+        if (this.sceneLayer !== lastSceneLayer) {
+            this.lastStageColor = this.runtime.renderer._backgroundColor4f;
+        }
+        this.appendElementAboveScratchCanvas(this.renderer.domElement);
+        this.updateScratchCanvasRelayering();
+    }
+    setSceneBackgroundColor(args) {
+        if (!this.renderer) return;
+        const rgb = Cast.toRgbColorObject(args.COLOR);
+        const color = Color.rgbToDecimal(rgb);
+        this.renderer.penguinMod.backgroundColor = color;
+        this.renderer.setClearColor(color, this.renderer.penguinMod.backgroundOpacity);
+    }
+    setSceneBackgroundOpacity(args) {
+        if (!this.renderer) return;
+        let opacity = Cast.toNumber(args.OPACITY);
+        if (opacity > 100) opacity = 100;
+        if (opacity < 0) opacity = 0;
+        const backgroundOpac = 1 - (opacity / 100);
+        this.renderer.penguinMod.backgroundOpacity = backgroundOpac;
+        this.renderer.setClearColor(this.renderer.penguinMod.backgroundColor, backgroundOpac);
+    }
+    show3d() {
+        this.renderer.domElement.style.display = ""
+    }
+    hide3d() {
+        this.renderer.domElement.style.display = "none"
+    }
+    is3dVisible() {
+        return this.renderer.domElement.style.display === "" || this.renderer.domElement.style.display === "absolute"
+    }
+
+    getCameraZoom() {
+        if (!this.camera) return "";
+        return Cast.toNumber(this.camera.zoom) * 100;
+    }
+    setCameraZoom(args) {
+        if (!this.camera) return;
+        this.camera.zoom = Cast.toNumber(args.ZOOM) / 100;
+        this.camera.updateProjectionMatrix();
+    }
+
+    getCameraClipPlane(args) {
+        if (!this.camera) return "";
+        const plane = args.CLIPPLANE;
+        if (!["near", "far"].includes(plane)) return "";
+        return this.camera[plane];
+    }
+
+    getCameraAspectRatio() {
+        if (!this.camera) return "";
+        return Cast.toNumber(this.camera.aspect);
+    }
+    getCameraFov() {
+        if (!this.camera) return "";
+        return Cast.toNumber(this.camera.fov);
+    }
+
+    isCameraPerspective() {
+        if (!this.camera) return false;
+        return Cast.toBoolean(this.camera.isPerspectiveCamera);
+    }
+    isCameraOrthographic() {
+        if (!this.camera) return false;
+        return Cast.toBoolean(!this.camera.isPerspectiveCamera);
+    }
+
+    doesObjectExist(args) {
+        if (!this.scene) return false;
+        const name = Cast.toString(args.NAME);
+        // !! is easier to type than if (...) { return true; } return false;
+        return !!this.scene.getObjectByName(name);
+    }
+
+    createGameObject(args, util, type) {
+        if (!this.scene) return;
+        const name = Cast.toString(args.NAME);
+        if (this.scene.getObjectByName(name)) return this.stackWarning(util, 'An object with this name already exists!');
+        const position = {
+            x: Cast.toNumber(args.X),
+            y: Cast.toNumber(args.Y),
+            z: Cast.toNumber(args.Z),
+        };
+        let object;
+        switch (type) {
+            case 'sphere': {
+                const geometry = new Three.SphereGeometry(1);
+                const material = new Three.MeshStandardMaterial({ color: 0xffffff });
+                const sphere = new Three.Mesh(geometry, material);
+                object = sphere;
+                break;
+            }
+            case 'plane': {
+                const geometry = new Three.PlaneGeometry(1, 1);
+                const material = new Three.MeshStandardMaterial({ color: 0xffffff });
+                const plane = new Three.Mesh(geometry, material);
+                object = plane;
+                break;
+            }
+            case 'mesh': {
+                const url = Cast.toString(args.URL);
+                // switch loaders based on file type
+                let fileType = 'obj';
+                switch (Cast.toString(args.FILETYPE)) {
+                    case '.glb / .gltf':
+                        fileType = 'glb';
+                        break;
+                    case '.fbx':
+                        fileType = 'fbx';
+                        break;
+                }
+                // we need to do a promise here so that stack continues on load
+                return new Promise((resolve) => {
+                    let loader = MeshLoaders.OBJ;
+                    switch (fileType) {
+                        case 'glb':
+                            loader = MeshLoaders.GLTF;
+                            break;
+                        case 'fbx':
+                            loader = MeshLoaders.FBX;
+                            break;
+                    }
+                    if (url in this.savedMeshes) {
+                        const mesh = this.savedMeshes[url];
+                        object = mesh.clone();
+                        object.name = name;
+                        this.existingSceneObjects.push(name);
+                        object.isPenguinMod = true;
+                        object.isMeshObj = true;
+                        object.position.set(position.x, position.y, position.z);
+                        this.scene.add(object);
+                        resolve();
+                        return;
+                    }
+                    else {
+                        loader.load(url, (object) => {
+                            // success
+                            if (loader === MeshLoaders.GLTF) {
+                                object = object.scene;
+                            }
+                            if (loader === MeshLoaders.OBJ) {
+                                const material = new Three.MeshStandardMaterial({ color: 0xffffff });
+                                material.wireframe = false;
+                                this.updateMaterialOfObjObject(object, material);
+                                this.savedMeshes[url] = object;
+                            }
+                            object.name = name;
+                            this.existingSceneObjects.push(name);
+                            object.isPenguinMod = true;
+                            object.isMeshObj = true;
+                            object.position.set(position.x, position.y, position.z);
+                            this.scene.add(object);
+                            resolve();
+                        }, () => { }, (error) => {
+                            console.warn('Failed to load 3D mesh obj;', error);
+                            this.stackWarning(util, 'Failed to get the 3D mesh!');
+                            resolve();
+                        })
+                    }
+                });
+            }
+            case 'light': {
+                const type = Cast.toString(args.LIGHTTYPE);
+                // switch type because there are different types of lights
+                let light;
+                switch (type) {
+                    default: {
+                        light = new Three.PointLight(0xffffff, 1, 100);
+                        break;
+                    }
+                }
+                object = light;
+                this.existingSceneLights.push(name);
+                break;
+            }
+            default: {
+                const geometry = new Three.BoxGeometry(1, 1, 1);
+                const material = new Three.MeshStandardMaterial({ color: 0xffffff });
+                const cube = new Three.Mesh(geometry, material);
+                object = cube;
+                break;
+            }
+        }
+        object.name = name;
+        this.existingSceneObjects.push(name);
+        object.isPenguinMod = true;
+        object.position.set(position.x, position.y, position.z);
+        this.scene.add(object);
+    }
+    createCubeObject(args, util) {
+        this.createGameObject(args, util, 'cube');
+    }
+    createSphereObject(args, util) {
+        this.createGameObject(args, util, 'sphere');
+    }
+    createPlaneObject(args, util) {
+        this.createGameObject(args, util, 'plane');
+    }
+    createMeshObject(args, util) {
+        this.createGameObject(args, util, 'mesh');
+    }
+    createMeshObjectFileTyped(args, util) {
+        this.createGameObject(args, util, 'mesh');
+    }
+    createLightObject(args, util) {
+        this.createGameObject(args, util, 'light');
+    }
+
+    getMaterialOfObjObject(object) {
+        let material;
+        object.traverse((child) => {
+            if (child instanceof Three.Mesh) {
+                material = child.material;
+            }
+        });
+        return material;
+    }
+    updateMaterialOfObjObject(object, material) {
+        object.traverse((child) => {
+            if (child instanceof Three.Mesh) {
+                child.material = material;
+            }
+        });
+    }
+
+    setObjectPosition(args) {
+        if (!this.scene) return;
+        const name = Cast.toString(args.NAME);
+        const position = {
+            x: Cast.toNumber(args.X),
+            y: Cast.toNumber(args.Y),
+            z: Cast.toNumber(args.Z),
+        };
+        const object = this.scene.getObjectByName(name);
+        if (!object) return;
+        object.position.set(position.x, position.y, position.z);
+    }
+    setObjectRotation(args) {
+        if (!this.scene) return;
+        const name = Cast.toString(args.NAME);
+        const rotation = {
+            x: Cast.toNumber(args.X),
+            y: Cast.toNumber(args.Y),
+            z: Cast.toNumber(args.Z),
+        };
+        const object = this.scene.getObjectByName(name);
+        if (!object) return;
+        // const euler = new Three.Euler(toRad(rotation.x), toRad(rotation.y), toRad(rotation.z));
+        // object.setRotationFromEuler(euler);
+        const euler = new Three.Euler(0, 0, 0);
+        object.setRotationFromEuler(euler);
+        object.rotateY(toRad(rotation.y));
+        object.rotateX(toRad(rotation.x));
+        object.rotateZ(toRad(rotation.z));
+    }
+    setObjectSize(args) {
+        if (!this.scene) return;
+        const name = Cast.toString(args.NAME);
+        const size = {
+            x: Cast.toNumber(args.X) / 100,
+            y: Cast.toNumber(args.Y) / 100,
+            z: Cast.toNumber(args.Z) / 100,
+        };
+        const object = this.scene.getObjectByName(name);
+        if (!object) return;
+        object.scale.set(size.x, size.y, size.z);
+    }
+    moveObjectUnits(args) {
+        if (!this.scene) return;
+        const name = Cast.toString(args.NAME);
+        const object = this.scene.getObjectByName(name);
+        if (!object) return;
+
+        const amount = Cast.toNumber(args.AMOUNT);
+        const direction = new Three.Vector3();
+        object.getWorldDirection(direction);
+        object.position.add(direction.multiplyScalar(amount));
+    }
+
+    getObjectPosition(args) {
+        if (!this.scene) return "";
+        const name = Cast.toString(args.NAME);
+        const object = this.scene.getObjectByName(name);
+        if (!object) return '';
+        const v = args.VECTOR3;
+        if (!v) return "";
+        if (!["x", "y", "z"].includes(v)) return "";
+        return Cast.toNumber(object.position[v]);
+    }
+    getObjectRotation(args) {
+        if (!this.scene) return "";
+        const name = Cast.toString(args.NAME);
+        const object = this.scene.getObjectByName(name);
+        if (!object) return '';
+        const v = args.VECTOR3;
+        if (!v) return "";
+        if (!["x", "y", "z"].includes(v)) return "";
+        const rotation = Cast.toNumber(object.rotation[v]);
+        // rotation is in radians, convert to degrees but round it
+        // a bit so that we get 46 instead of 45.999999999999996
+        return toDegRounding(rotation);
+    }
+    getObjectSize(args) {
+        if (!this.scene) return "";
+        const name = Cast.toString(args.NAME);
+        const object = this.scene.getObjectByName(name);
+        if (!object) return '';
+        const v = args.VECTOR3;
+        if (!v) return "";
+        if (!["x", "y", "z"].includes(v)) return "";
+        return Cast.toNumber(object.scale[v]) * 100;
+    }
+    getObjectColor(args) {
+        if (!this.scene) return "";
+        const name = Cast.toString(args.NAME);
+        const object = this.scene.getObjectByName(name);
+        if (!object) return '';
+        return "#" + object.material.color.getHexString()
+    }
+    deleteObject(args) {
+        if (!this.scene) return;
+        const name = Cast.toString(args.NAME);
+        const object = this.scene.getObjectByName(name);
+        if (!object) return;
+        const isLight = object.isLight;
+        object.clear();
+        this.scene.remove(object);
+        const idx = this.existingSceneObjects.indexOf(name);
+        this.existingSceneObjects.splice(idx, 1);
+        if (isLight) {
+            const lidx = this.existingSceneLights.indexOf(name);
+            this.existingSceneLights.splice(lidx, 1);
+        }
+    }
+    setObjectColor(args) {
+        if (!this.scene) return;
+        const name = Cast.toString(args.NAME);
+        const rgb = Cast.toRgbColorObject(args.COLOR);
+        const color = Color.rgbToDecimal(rgb);
+        const object = this.scene.getObjectByName(name);
+        if (!object) return;
+        if (object.isLight) {
+            object.color.set(color);
+            return
+        }
+        if (object.isMeshObj) {
+            const material = this.getMaterialOfObjObject(object);
+            if (!material) return;
+            material.color.set(color);
+            this.updateMaterialOfObjObject(object, material);
+            return;
+        }
+        object.material.color.set(color);
+    }
+    setObjectShading(args) {
+        if (!this.scene) return;
+        const name = Cast.toString(args.NAME);
+        const on = Cast.toString(args.ONOFF) === 'on';
+        const object = this.scene.getObjectByName(name);
+        if (!object) return;
+        if (object.isLight) return;
+        if (object.isMeshObj) {
+            const material = this.getMaterialOfObjObject(object);
+            if (!material) return;
+            const color = '#' + material.color.getHexString();
+            let newMat;
+            if (on) {
+                newMat = new Three.MeshStandardMaterial({ color: color });
+            } else {
+                newMat = new Three.MeshBasicMaterial({ color: color });
+            }
+            newMat.color.set(color);
+            this.updateMaterialOfObjObject(object, newMat);
+            return;
+        }
+        const color = '#' + object.material.color.getHexString();
+        if (on) {
+            object.material = new Three.MeshStandardMaterial({ color: color });
+        } else {
+            object.material = new Three.MeshBasicMaterial({ color: color });
+        }
+    }
+    setObjectWireframe(args) {
+        if (!this.scene) return;
+        const name = Cast.toString(args.NAME);
+        const on = Cast.toString(args.ONOFF) === 'on';
+        const object = this.scene.getObjectByName(name);
+        if (!object) return;
+        if (object.isLight) return;
+        if (object.isMeshObj) {
+            const material = this.getMaterialOfObjObject(object);
+            if (!material) return;
+            material.wireframe = on;
+            this.updateMaterialOfObjObject(object, material);
+            return;
+        }
+        object.material.wireframe = on;
+    }
+
+    existingObjectsArray(args) {
+        const listType = Cast.toString(args.OBJECTLIST);
+        const validOptions = ["objects", "physical objects", "lights"];
+        if (!validOptions.includes(listType)) return '[]';
+        switch (listType) {
+            case 'objects':
+                return JSON.stringify(this.existingSceneObjects);
+            case 'lights':
+                return JSON.stringify(this.existingSceneLights);
+            case 'physical objects': {
+                const physical = this.existingSceneObjects.filter(objectName => {
+                    return !this.existingSceneLights.includes(objectName);
+                });
+                return JSON.stringify(physical);
+            }
+            default:
+                return '[]';
+        }
+    }
+
+    objectTouchingObject(args) {
+        if (!this.scene) return false;
+        const name1 = Cast.toString(args.NAME1);
+        const name2 = Cast.toString(args.NAME2);
+        const object1 = this.scene.getObjectByName(name1);
+        const object2 = this.scene.getObjectByName(name2);
+        if (!object1) return false;
+        if (!object2) return false;
+        if (object1.isLight) return false; // currently lights are not supported for collisions
+        if (object2.isLight) return false; // currently lights are not supported for collisions
+        const box1 = new Three.Box3().setFromObject(object1);
+        const box2 = new Three.Box3().setFromObject(object2);
+        const collision = box1.intersectsBox(box2);
+        return collision;
+    }
+
+    pointTowardsObject(args) {
+        if (!this.scene) return false;
+        const name1 = Cast.toString(args.NAME1);
+        const name2 = Cast.toString(args.NAME2);
+        const object1 = this.scene.getObjectByName(name1);
+        const object2 = this.scene.getObjectByName(name2);
+        if (!object1) return false;
+        if (!object2) return false;
+        object1.lookAt(object2.position);
+    }
+    pointTowardsXYZ(args) {
+        if (!this.scene) return false;
+        const name = Cast.toString(args.NAME);
+        const object = this.scene.getObjectByName(name);
+        if (!object) return false;
+        const position = {
+            x: Cast.toNumber(args.X),
+            y: Cast.toNumber(args.Y),
+            z: Cast.toNumber(args.Z)
+        };
+        object.lookAt(position.x, position.y, position.z);
+    }
+
+    MoveCameraBy(args) {
+        if (!this.camera) return;
+        const amount = Cast.toNumber(args.AMOUNT);
+        // comment so it updates bc github was having problems
+        const direction = new Three.Vector3();
+        this.camera.getWorldDirection(direction);
+        this.camera.position.add(direction.multiplyScalar(amount));
+    }
+
+    changeCameraPosition(args) {
+        if (!this.camera) return;
+        this.camera.position.x += Cast.toNumber(args.X);
+        this.camera.position.y += Cast.toNumber(args.Y);
+        this.camera.position.z += Cast.toNumber(args.Z);
+    }
+
+    changeCameraRotation(args) {
+        if (!this.camera) return;
+        this.camera.rotation.x += Cast.toNumber(args.X);
+        this.camera.rotation.y += Cast.toNumber(args.Y);
+        this.camera.rotation.z += Cast.toNumber(args.Z);
+    }
+
+    raycastResultToReadable(result) {
+        const newResult = Clone.simple(result);
+        for (const result of newResult) {
+            // for each collision
+            result.object = result.object.object.name;
+        }
+        return newResult;
+    }
+
+    rayCollision(args) {
+        if (!this.scene) return '';
+        const ray = new Three.Raycaster();
+        const origin = {
+            x: Cast.toNumber(args.X),
+            y: Cast.toNumber(args.Y),
+            z: Cast.toNumber(args.Z),
+        };
+        const direction = {
+            x: Cast.toNumber(args.DX),
+            y: Cast.toNumber(args.DY),
+            z: Cast.toNumber(args.DZ),
+        };
+        ray.set(new Three.Vector3(origin.x, origin.y, origin.z), new Three.Vector3(direction.x, direction.y, direction.z));
+        const intersects = ray.intersectObjects(this.scene.children, true);
+        if (intersects.length === 0) return '';
+        const first = intersects[0];
+        return first.object.name;
+    }
+    rayCollisionCamera() {
+        if (!this.scene) return '';
+        if (!this.camera) return '';
+        const ray = new Three.Raycaster();
+        ray.setFromCamera(new Three.Vector2(), this.camera);
+        const intersects = ray.intersectObjects(this.scene.children, true);
+        if (intersects.length === 0) return '';
+        const first = intersects[0];
+        return first.object.name;
+    }
+    rayCollisionArray(args) {
+        if (!this.scene) return '[]';
+        const ray = new Three.Raycaster();
+        const origin = {
+            x: Cast.toNumber(args.X),
+            y: Cast.toNumber(args.Y),
+            z: Cast.toNumber(args.Z),
+        };
+        const direction = {
+            x: Cast.toNumber(args.DX),
+            y: Cast.toNumber(args.DY),
+            z: Cast.toNumber(args.DZ),
+        };
+        ray.set(new Three.Vector3(origin.x, origin.y, origin.z), new Three.Vector3(direction.x, direction.y, direction.z));
+        const intersects = ray.intersectObjects(this.scene.children, true);
+        if (intersects.length === 0) return '[]';
+        const result = this.raycastResultToReadable(intersects);
+        return JSON.stringify(result);
+    }
+    rayCollisionCameraArray() {
+        if (!this.scene) return '[]';
+        if (!this.camera) return '[]';
+        const ray = new Three.Raycaster();
+        ray.setFromCamera(new Three.Vector2(), this.camera);
+        const intersects = ray.intersectObjects(this.scene.children, true);
+        if (intersects.length === 0) return '[]';
+        const result = this.raycastResultToReadable(intersects);
+        return JSON.stringify(result);
     }
 }
-function infoArgumentMenu(type, menu) {
-    return {
-        type: type,
-        menu: menu
-    }
-}
 
-function createCommandBlock(opcode, text, args, icon, hidden) {
-    const obj = {
-        opcode: opcode,
-        text: text ? text : opcode,
-        blockType: BlockType.COMMAND
-    }
-    if (args) {
-        obj.arguments = args;
-    }
-    if (icon) {
-        obj.blockIconURI = icon;
-    }
-    if (hidden === true) {
-        obj.hideFromPalette = true;
-    }
-    return obj;
-}
-function createReporterBlock(opcode, text, args, icon, disablemonitor) {
-    const obj = {
-        opcode: opcode,
-        text: text ? text : opcode,
-        blockType: BlockType.REPORTER
-    }
-    if (typeof disablemonitor === 'boolean') {
-        obj.disableMonitor = disablemonitor;
-    }
-    if (args) {
-        obj.arguments = args;
-    }
-    if (icon) {
-        obj.blockIconURI = icon;
-    }
-    return obj;
-}
-function createBooleanBlock(opcode, text, args, icon) {
-    const obj = {
-        opcode: opcode,
-        text: text ? text : opcode,
-        blockType: BlockType.BOOLEAN,
-        disableMonitor: true
-    }
-    if (args) {
-        obj.arguments = args;
-    }
-    if (icon) {
-        obj.blockIconURI = icon;
-    }
-    return obj;
-}
-
-module.exports = {
-    id: 'jg3d',
-    name: '3D',
-    color1: '#B100FE',
-    color2: '#8600C3',
-    color3: '#5B0088',
-    blockIconURI: blockIconURI,
-    blocks: [
-        infoLabel("Initializing your scene"),
-
-        createCommandBlock('initialize', 'create 3D scene'),
-        createCommandBlock('dispose', 'remove 3D scene'),
-        seperator,
-        createCommandBlock(
-            'setCameraPerspective0',
-            'set scene camera to perspective camera with fov: [FOV]',
-            {
-                FOV: infoArgument(70)
-            },
-            Icons.Camera
-        ),
-        createCommandBlock(
-            'setCameraPerspective1',
-            'set scene camera to perspective camera with fov: [FOV] aspect ratio: [AR]',
-            {
-                FOV: infoArgument(70),
-                AR: infoArgument(480 / 360)
-            },
-            Icons.Camera
-        ),
-        createCommandBlock(
-            'setCameraPerspective2',
-            'set scene camera to perspective camera with fov: [FOV] aspect ratio: [AR] and only render objects within [NEAR] and [FAR] units of the camera',
-            {
-                FOV: infoArgument(70),
-                AR: infoArgument(480 / 360),
-                NEAR: infoArgument(0.1),
-                FAR: infoArgument(1000)
-            },
-            Icons.Camera
-        ),
-        seperator,
-        createCommandBlock('setCameraOrthographic0', 'set scene camera to orthographic camera', null, Icons.Camera),
-        createCommandBlock(
-            'setCameraOrthographic1',
-            'set scene camera to orthographic camera with left plane: [LEFT] right plane: [RIGHT] top plane: [TOP] bottom plane: [BOTTOM]',
-            {
-                LEFT: infoArgument(-480 / 2),
-                RIGHT: infoArgument(480 / 2),
-                TOP: infoArgument(360 / 2),
-                BOTTOM: infoArgument(-360 / 2)
-            },
-            Icons.Camera
-        ),
-        createCommandBlock(
-            'setCameraOrthographic2',
-            'set scene camera to orthographic camera with left plane: [LEFT] right plane: [RIGHT] top plane: [TOP] bottom plane: [BOTTOM] and only render objects within [NEAR] and [FAR] units of the camera',
-            {
-                LEFT: infoArgument(-480 / 2),
-                RIGHT: infoArgument(480 / 2),
-                TOP: infoArgument(360 / 2),
-                BOTTOM: infoArgument(-360 / 2),
-                NEAR: infoArgument(1),
-                FAR: infoArgument(1000)
-            },
-            Icons.Camera
-        ),
-        seperator,
-        createCommandBlock('render'),
-
-        infoLabel("Scene customization"),
-
-        createCommandBlock('setSceneLayer', "move 3D scene layer to [SIDE]", {
-            SIDE: infoArgumentMenu(ArgumentType.STRING, "frontBack")
-        }),
-        createCommandBlock('setSceneBackgroundColor', "set background color to [COLOR]", {
-            COLOR: infoArgument("COLOR")
-        }),
-        createCommandBlock('setSceneBackgroundOpacity', "set background transparency to [OPACITY]%", {
-            OPACITY: infoArgument(100)
-        }),
-        createCommandBlock("show3d", "show 3D scene", {}),
-        createCommandBlock("hide3d", "hide 3D scene", {}),
-        createBooleanBlock("is3dVisible", "is 3D scene visible?", {}),
-
-        infoLabel("Camera controls"),
-
-        createCommandBlock(
-            'MoveCameraBy',
-            'move camera by [AMOUNT]',
-            {
-                AMOUNT: infoArgument(10)
-            },
-            Icons.Camera
-        ),
-        createCommandBlock(
-            'setCameraPosition',
-            'set camera position to x: [X] y: [Y] z: [Z]',
-            {
-                X: infoArgument(0),
-                Y: infoArgument(0),
-                Z: infoArgument(0)
-            },
-            Icons.Camera
-        ),
-        createCommandBlock(
-            'changeCameraPosition',
-            'change camera position by x: [X] y: [Y] z: [Z]',
-            {
-                X: infoArgument(0),
-                Y: infoArgument(0),
-                Z: infoArgument(0)
-            },
-            Icons.Camera
-        ),
-        createCommandBlock(
-            'setCameraRotation',
-            'set camera rotation to x: [X] y: [Y] z: [Z]',
-            {
-                X: infoArgument('ANGLE'),
-                Y: infoArgument('ANGLE'),
-                Z: infoArgument('ANGLE')
-            },
-            Icons.Camera
-        ),
-        createCommandBlock(
-            'changeCameraRotation',
-            'change camera rotation by x: [X] y: [Y] z: [Z]',
-            {
-                X: infoArgument('ANGLE'),
-                Y: infoArgument('ANGLE'),
-                Z: infoArgument('ANGLE')
-            },
-            Icons.Camera
-        ),
-        createCommandBlock('setCameraZoom', 'set camera zoom to [ZOOM]%', {
-            ZOOM: infoArgument(100)
-        }, Icons.Camera),
-        createReporterBlock("getCameraClipPlane", "camera [CLIPPLANE]", {
-            CLIPPLANE: infoArgumentMenu(ArgumentType.STRING, "clippingPlanes")
-        }, Icons.Camera),
-        createReporterBlock("getCameraPosition", "camera [VECTOR3] position", {
-            VECTOR3: infoArgumentMenu(ArgumentType.STRING, "vector3")
-        }, Icons.Camera),
-        createReporterBlock("getCameraRotation", "camera [VECTOR3] rotation", {
-            VECTOR3: infoArgumentMenu(ArgumentType.STRING, "vector3")
-        }, Icons.Camera),
-        createReporterBlock("getCameraAspectRatio", "camera aspect ratio", null, Icons.Camera),
-        createReporterBlock("getCameraZoom", "camera zoom", null, Icons.Camera),
-        createReporterBlock("getCameraFov", "camera fov", null, Icons.Camera),
-        seperator,
-        createBooleanBlock("isCameraPerspective", "is scene camera a perspective camera?", null, Icons.Camera),
-        createBooleanBlock("isCameraOrthographic", "is scene camera an orthographic camera?", null, Icons.Camera),
-
-        infoLabel("Objects"),
-
-        createBooleanBlock("doesObjectExist", "object named [NAME] exists?", {
-            NAME: infoArgument("Object1")
-        }),
-        createReporterBlock("existingObjectsArray", "existing [OBJECTLIST]", {
-            OBJECTLIST: infoArgumentMenu(ArgumentType.STRING, "objectTypeList")
-        }),
-        seperator,
-        createCommandBlock('createCubeObject', 'create cube named [NAME] at x: [X] y: [Y] z: [Z]', {
-            NAME: infoArgument("Object1"),
-            X: infoArgument(0),
-            Y: infoArgument(0),
-            Z: infoArgument(0)
-        }, Icons.Cube),
-        createCommandBlock('createSphereObject', 'create sphere named [NAME] at x: [X] y: [Y] z: [Z]', {
-            NAME: infoArgument("Object1"),
-            X: infoArgument(0),
-            Y: infoArgument(0),
-            Z: infoArgument(0)
-        }, Icons.Sphere),
-        createCommandBlock('createPlaneObject', 'create plane named [NAME] at x: [X] y: [Y] z: [Z]', {
-            NAME: infoArgument("Object1"),
-            X: infoArgument(0),
-            Y: infoArgument(0),
-            Z: infoArgument(0)
-        }, Icons.Plane),
-        createCommandBlock('createMeshObject', 'create mesh named [NAME] with .obj data: [URL] at x: [X] y: [Y] z: [Z]', {
-            NAME: infoArgument("Object1"),
-            URL: infoArgument("data:text/plain;base64,"),
-            X: infoArgument(0),
-            Y: infoArgument(0),
-            Z: infoArgument(0)
-        }, Icons.OBJ, true),
-        createCommandBlock('createMeshObjectFileTyped', 'create mesh named [NAME] with [FILETYPE] data: [URL] at x: [X] y: [Y] z: [Z]', {
-            NAME: infoArgument("Object1"),
-            FILETYPE: infoArgumentMenu(ArgumentType.STRING, "meshFileTypes"),
-            URL: infoArgument("data:text/plain;base64,"),
-            X: infoArgument(0),
-            Y: infoArgument(0),
-            Z: infoArgument(0)
-        }, Icons.OBJ),
-        createCommandBlock('createLightObject', 'create [LIGHTTYPE] light named [NAME] at x: [X] y: [Y] z: [Z]', {
-            LIGHTTYPE: infoArgumentMenu(ArgumentType.STRING, "lightType"),
-            NAME: infoArgument("Light1"),
-            X: infoArgument(0),
-            Y: infoArgument(0),
-            Z: infoArgument(0)
-        }, Icons.Light),
-        seperator,
-        createCommandBlock('moveObjectUnits', 'move object named [NAME] by [AMOUNT]', {
-            NAME: infoArgument("Object1"),
-            AMOUNT: infoArgument(10)
-        }),
-        createCommandBlock("setObjectPosition", "move object named [NAME] to x: [X] y: [Y] z: [Z]", {
-            NAME: infoArgument("Object1"),
-            X: infoArgument(1),
-            Y: infoArgument(1),
-            Z: infoArgument(1)
-        }),
-        createCommandBlock("setObjectRotation", "set rotation of object named [NAME] to x: [X] y: [Y] z: [Z]", {
-            NAME: infoArgument("Object1"),
-            X: infoArgument('ANGLE'),
-            Y: infoArgument('ANGLE'),
-            Z: infoArgument('ANGLE')
-        }),
-        createCommandBlock("setObjectSize", "set size of object named [NAME] to x: [X]% y: [Y]% z: [Z]%", {
-            NAME: infoArgument("Object1"),
-            X: infoArgument(100),
-            Y: infoArgument(100),
-            Z: infoArgument(100)
-        }),
-        createCommandBlock('pointTowardsObject', 'point object named [NAME1] towards object named [NAME2]', {
-            NAME1: infoArgument("Object1"),
-            NAME2: infoArgument("Object2"),
-        }),
-        createCommandBlock('pointTowardsXYZ', 'point object named [NAME] towards x: [X] y: [Y] z: [Z]', {
-            NAME: infoArgument("Object1"),
-            X: infoArgument(31),
-            Y: infoArgument(26),
-            Z: infoArgument(47),
-        }),
-        createReporterBlock("getObjectPosition", "[VECTOR3] position of object named [NAME]", {
-            VECTOR3: infoArgumentMenu(ArgumentType.STRING, "vector3"),
-            NAME: infoArgument("Object1"),
-        }),
-        createReporterBlock("getObjectRotation", "[VECTOR3] rotation of object named [NAME]", {
-            VECTOR3: infoArgumentMenu(ArgumentType.STRING, "vector3"),
-            NAME: infoArgument("Object1"),
-        }),
-        createReporterBlock("getObjectSize", "[VECTOR3] size of object named [NAME]", {
-            VECTOR3: infoArgumentMenu(ArgumentType.STRING, "vector3"),
-            NAME: infoArgument("Object1"),
-        }),
-        seperator,
-        createBooleanBlock("objectTouchingObject", "object [NAME1] touching object [NAME2]?", {
-            NAME1: infoArgument("Object1"),
-            NAME2: infoArgument("Object2"),
-        }, Icons.Touching),
-        seperator,
-        createCommandBlock("deleteObject", "remove object named [NAME]", {
-            NAME: infoArgument("Object1")
-        }),
-        createCommandBlock("setObjectColor", "recolor object named [NAME] to [COLOR]", {
-            NAME: infoArgument("Object1"),
-            COLOR: infoArgument("COLOR"),
-        }),
-        createCommandBlock("setObjectShading", "turn [ONOFF] shading on object named [NAME]", {
-            ONOFF: infoArgumentMenu(ArgumentType.STRING, "onoff"),
-            NAME: infoArgument("Object1"),
-        }),
-        createCommandBlock("setObjectWireframe", "turn [ONOFF] wireframe view on object named [NAME]", {
-            ONOFF: infoArgumentMenu(ArgumentType.STRING, "onoff"),
-            NAME: infoArgument("Object1"),
-        }, Icons.Wireframe),
-        seperator,
-        createReporterBlock("rayCollision", "first object in raycast from x: [X] y: [Y] z: [Z] with direction x: [DX] y: [DY] z: [DZ]", {
-            X: infoArgument(0),
-            Y: infoArgument(0),
-            Z: infoArgument(0),
-            DX: infoArgument(0),
-            DY: infoArgument(0),
-            DZ: infoArgument(0),
-        }, Icons.Raycast, true),
-        createReporterBlock("rayCollisionArray", "raycast result from x: [X] y: [Y] z: [Z] with direction x: [DX] y: [DY] z: [DZ]", {
-            X: infoArgument(0),
-            Y: infoArgument(0),
-            Z: infoArgument(0),
-            DX: infoArgument(0),
-            DY: infoArgument(0),
-            DZ: infoArgument(0),
-        }, Icons.Raycast, true),
-        createReporterBlock("rayCollisionCamera", "first object from raycast in camera center", {
-        }, Icons.Raycast, true),
-        createReporterBlock("rayCollisionCameraArray", "raycast result starting from the camera center", {
-        }, Icons.Raycast, true)
-    ],
-    menus: {
-        cameraType: infoMenu(["perspective", "orthographic"]),
-        lightType: infoMenu(["point"]),
-        clippingPlanes: infoMenu(["near", "far"]),
-        frontBack: infoMenu(["front", "back"]),
-        vector3: infoMenu(["x", "y", "z"]),
-        vector2: infoMenu(["x", "y"]),
-        onoff: infoMenu(["on", "off"]),
-        objectTypeList: infoMenu(["objects", "physical objects", "lights"]),
-        meshFileTypes: infoMenu([".obj", ".glb / .gltf", ".fbx"])
-    }
-}
+module.exports = Jg3DBlocks;

@@ -107,6 +107,7 @@ runtimeFunctions.waitPromise = `
 const waitPromise = function*(promise) {
     const thread = globalState.thread;
     let returnValue;
+    let errorReturn;
 
     promise
         .then(value => {
@@ -114,8 +115,9 @@ const waitPromise = function*(promise) {
             thread.status = 0; // STATUS_RUNNING
         })
         .catch(error => {
+            errorReturn = error;
+            // i realized, i dont actually know what would happen if we never do this but throw and exit anyways
             thread.status = 0; // STATUS_RUNNING
-            globalState.log.warn('Promise rejected in compiled script:', error);
         });
 
     // enter STATUS_PROMISE_WAIT and yield
@@ -123,6 +125,8 @@ const waitPromise = function*(promise) {
     thread.status = 1; // STATUS_PROMISE_WAIT
     yield;
 
+    // throw the promise error if ee got one
+    if (errorReturn) throw errorReturn
     return returnValue;
 }`;
 
