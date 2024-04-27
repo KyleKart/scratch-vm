@@ -15,7 +15,9 @@ const Scratch = {
     TargetType,
     Cast,
     Clone,
-    Color
+    Color,
+    isPenguinMod: true,
+    isElectraMod: true
 };
 
 module.exports = Scratch;
