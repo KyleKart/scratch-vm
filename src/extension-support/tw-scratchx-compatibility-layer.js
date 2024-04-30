@@ -79,6 +79,11 @@ const parseScratchXArgument = (argument, defaultValue) => {
         const split = argument.split(/\.|:/);
         const menuName = split[1];
         result.menu = menuName;
+    } else if (argument === 'b') {
+        result.type = ArgumentType.BOOLEAN;
+        if (!hasDefaultValue) {
+            result.defaultValue = '';
+        }
     } else {
         throw new Error(`Unknown ScratchX argument type: ${argument}`);
     }
