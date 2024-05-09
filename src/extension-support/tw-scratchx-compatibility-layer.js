@@ -60,7 +60,8 @@ const isScratchCompatibleValue = v => typeof v === 'string' || typeof v === 'num
 const parseScratchXArgument = (argument, defaultValue) => {
     const result = {};
     const hasDefaultValue = isScratchCompatibleValue(defaultValue);
-    if (hasDefaultValue) {
+    // defaultValue is ignored for booleans in Scratch 3
+    if (hasDefaultValue && argument !== 'b') {
         result.defaultValue = defaultValue;
     }
     // TODO: ScratchX docs don't mention support for boolean arguments?
@@ -81,9 +82,6 @@ const parseScratchXArgument = (argument, defaultValue) => {
         result.menu = menuName;
     } else if (argument === 'b') {
         result.type = ArgumentType.BOOLEAN;
-        if (!hasDefaultValue) {
-            result.defaultValue = '';
-        }
     } else {
         throw new Error(`Unknown ScratchX argument type: ${argument}`);
     }
