@@ -87,7 +87,7 @@ test('complex extension', async t => {
                 ['r', 'multiply %n by %n and append %s', 'multiplyAndAppend'],
                 ['R', 'repeat %m.myMenu %n', 'repeat', ''],
                 ['-'],
-                ['b', 'touching %s', 'touching', 'Sprite1']
+                ['b', 'touching %s %b', 'touching', 'Sprite1', 'ignored']
             ],
             menus: {
                 myMenu: ['abc', 'def', 123, true, false],
@@ -178,12 +178,15 @@ test('complex extension', async t => {
         '---',
         {
             opcode: 'touching',
-            text: 'touching [0]',
+            text: 'touching [0] [1]',
             blockType: 'Boolean',
             arguments: [
                 {
                     type: 'string',
                     defaultValue: 'Sprite1'
+                },
+                {
+                    type: 'Boolean'
                 }
             ]
         }
